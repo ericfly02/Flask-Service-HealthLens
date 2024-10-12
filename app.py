@@ -8,7 +8,15 @@ from flask_cors import CORS
 import requests
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "https://www.healthlens.app"}})
+# CORS configuration
+cors_options = {
+    "origins": "https://www.healthlens.app",  # Allow requests from your frontend
+    "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Allow these methods
+    "allow_headers": ["Content-Type", "Authorization"],  # Allow these headers
+    "supports_credentials": True  # If you need to support credentials
+}
+
+CORS(app, **cors_options)  # Apply CORS to the app
 
 # Function to download model from Google Drive
 def download_model_from_google_drive(file_id, destination):
@@ -115,7 +123,7 @@ def preprocess_image(file):
     return transform(image).unsqueeze(0)  # Add batch dimension
 
 # Endpoint to upload an image and get predictions
-@app.route('/predict/skin', methods=['POST'])
+@app.route('/predict/skin', methods=['OPTIONS', 'POST'])
 def predict_melanoma():
     if 'image' not in request.files:
         return jsonify({"error": "No image file provided"}), 400
@@ -182,7 +190,7 @@ def predict_skin(image):
     return jsonify({"prediction": prediction}), 200
 
 # Endpoint for nail predictions
-@app.route('/predict/nails', methods=['POST'])
+@app.route('/predict/nails', methods=['OPTIONS', 'POST'])
 def predict_nails():
     if 'image' not in request.files:
         return jsonify({"error": "No image file provided"}), 400
@@ -227,7 +235,7 @@ def predict_nails():
         return jsonify({"error": str(e)}), 500
 
 # Endpoint for cataract predictions
-@app.route('/predict/cataracts', methods=['POST'])
+@app.route('/predict/cataracts', methods=['OPTIONS', 'POST'])
 def predict_cataracts():
     if 'image' not in request.files:
         return jsonify({"error": "No image file provided"}), 400
