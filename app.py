@@ -8,7 +8,7 @@ from flask_cors import CORS
 import requests
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "https://www.healthlens.app"}})
 
 # Function to download model from Google Drive
 def download_model_from_google_drive(file_id, destination):
