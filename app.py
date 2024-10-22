@@ -1,13 +1,32 @@
 import os
+import io
 from flask import Flask, request, jsonify
 from PIL import Image
 import torch
 from torch import nn,optim
 from torchvision import transforms, models
 from flask_cors import CORS
+from ibm_watson import SpeechToTextV1
+from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
+from dotenv import load_dotenv
+import subprocess
+import requests
+import tempfile
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
-CORS(app) 
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Watson Speech to Text API credentials
+API_KEY = os.getenv('IBM_SPEECH_TO_TEXT_API_KEY')
+API_URL = os.getenv('IBM_SPEECH_TO_TEXT_URL')
+
+# Setup the IBM Watson Speech to Text service
+authenticator = IAMAuthenticator(API_KEY)
+speech_to_text = SpeechToTextV1(authenticator=authenticator)
+speech_to_text.set_service_url(API_URL)
 
 # Endpoint to upload an image and get predictions
 @app.route('/predict/skin', methods=['POST'])
@@ -63,22 +82,27 @@ def predict_melanoma():
         # _, predicted = torch.max(output, 1)
         # prediction = predicted.item()
 
-        # returns prediction
-        prediction = classes[res.argmax().item()]
+        with torch.no_grad():  # Disable gradient calculation for inference
+            output = model(image)  # Get the log-probabilities
+            probabilities = torch.exp(output)  # Convert log-probabilities to probabilities
 
-        print("PREDICTION:", prediction)
+        # Get the predicted class and its confidence
+        confidence, predicted_class_idx = torch.max(probabilities, dim=1)
+        predicted_class = classes[predicted_class_idx.item()]
+        
+        # Convert the confidence tensor to a Python float
+        confidence_score = confidence.item()
 
+        print(f"PREDICTION: {predicted_class}, CONFIDENCE: {confidence_score:.4f}")
 
         # if prediction is benign, then run the other skin model
-        if prediction == "benign":
+        if predicted_class == "benign":
             return predict_skin(image)
 
-        # Return the prediction result
-        return jsonify({"prediction": prediction}), 200
+        return jsonify({"prediction": predicted_class, "confidence": confidence_score}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 ### DEFINE PREDICT SKINS
 def predict_skin(image):
@@ -108,14 +132,21 @@ def predict_skin(image):
     'Melanoma Skin Cancer Nevi and Moles': 11, 'Nail Fungus and other Nail Disease': 12, 'Poison Ivy Photos and other Contact Dermatitis': 13, 'Psoriasis pictures Lichen Planus and related diseases': 14, 'Scabies Lyme Disease and other Infestations and Bites': 15, 
     'Seborrheic Keratoses and other Benign Tumors': 16, 'Systemic Disease': 17, 'Tinea Ringworm Candidiasis and other Fungal Infections': 18, 'Urticaria Hives': 19, 'Vascular Tumors': 20, 'Vasculitis Photos': 21, 'Warts Molluscum and other Viral Infections': 22}
     classes = {value:key for key, value in classes.items()} # invert for proper argmax
-    res = torch.exp(model(image))
-    # returns prediction
-    prediction = classes[res.argmax().item()]
-    print("PREDICTION DERMNET:", prediction)
 
-    return jsonify({"prediction": prediction}), 200
+    with torch.no_grad():  # Disable gradient calculation for inference
+        output = model(image)  # Get the log-probabilities
+        probabilities = torch.exp(output)  # Convert log-probabilities to probabilities
 
+    # Get the predicted class and its confidence
+    confidence, predicted_class_idx = torch.max(probabilities, dim=1)
+    predicted_class = classes[predicted_class_idx.item()]
+    
+    # Convert the confidence tensor to a Python float
+    confidence_score = confidence.item()
 
+    print(f"PREDICTION: {predicted_class}, CONFIDENCE: {confidence_score:.4f}")
+
+    return jsonify({"prediction": predicted_class, "confidence": confidence_score}), 200
 
 ### ROUTE FOR DERMNET PREDICTIONS:
 # Endpoint to upload an image and get predictions
@@ -168,22 +199,23 @@ def predict_nails():
          'koilonychia': 8, 'leukonychia': 9, 'onycholycis': 10, 'pale nail': 11, 'red lunula': 12, 'splinter hemmorrage': 13, 'terry_s nail': 14, 'white nail': 15, 'yellow nails': 16}
         classes = {value:key for key, value in classes.items()} # invert for proper argmax
         
-        # Process the output (e.g., if it's a classification model, take the top prediction)
-        # _, predicted = torch.max(output, 1)
-        # prediction = predicted.item()
+        with torch.no_grad():  # Disable gradient calculation for inference
+            output = model(image)  # Get the log-probabilities
+            probabilities = torch.exp(output)  # Convert log-probabilities to probabilities
 
-        # returns prediction
-        prediction = classes[res.argmax().item()]
+        # Get the predicted class and its confidence
+        confidence, predicted_class_idx = torch.max(probabilities, dim=1)
+        predicted_class = classes[predicted_class_idx.item()]
+        
+        # Convert the confidence tensor to a Python float
+        confidence_score = confidence.item()
 
-        print("PREDICTION:", prediction)
+        print(f"PREDICTION: {predicted_class}, CONFIDENCE: {confidence_score:.4f}")
 
-        # Return the prediction result
-        return jsonify({"prediction": prediction}), 200
+        return jsonify({"prediction": predicted_class, "confidence": confidence_score}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
 
 
 ### FOR CATARACTS
@@ -237,21 +269,85 @@ def predict_cataracts():
         classes = {'cataract': 0, 'normal': 1}
         classes = {value:key for key, value in classes.items()} # invert for proper argmax
         
-        # Process the output (e.g., if it's a classification model, take the top prediction)
-        # _, predicted = torch.max(output, 1)
-        # prediction = predicted.item()
+        with torch.no_grad():  # Disable gradient calculation for inference
+            output = model(image)  # Get the log-probabilities
+            probabilities = torch.exp(output)  # Convert log-probabilities to probabilities
 
-        # returns prediction
-        prediction = classes[res.argmax().item()]
+        # Get the predicted class and its confidence
+        confidence, predicted_class_idx = torch.max(probabilities, dim=1)
+        predicted_class = classes[predicted_class_idx.item()]
+        
+        # Convert the confidence tensor to a Python float
+        confidence_score = confidence.item()
 
-        print("PREDICTION:", prediction)
+        print(f"PREDICTION: {predicted_class}, CONFIDENCE: {confidence_score:.4f}")
 
-        # Return the prediction result
-        return jsonify({"prediction": prediction}), 200
+        return jsonify({"prediction": predicted_class, "confidence": confidence_score}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# Convert audio file to PCM if needed
+def convert_audio_to_wav(input_audio_path):
+    output_file = "converted_audio.wav"
+    try:
+        command = [
+            "ffmpeg", "-i", input_audio_path, 
+            "-ar", "16000",  # Set sample rate to 16000 Hz
+            "-ac", "1",      # Set number of audio channels to 1 (mono)
+            "-f", "wav",     # Output format as WAV
+            "-acodec", "pcm_s16le",  # Codec: PCM 16-bit little endian
+            output_file
+        ]
+        subprocess.run(command, check=True)
+        return output_file
+    except Exception as e:
+        raise RuntimeError(f"Failed to convert audio: {str(e)}")
+
+
+### FOR IBM SPEECH-TO-TEXT-SERVICE
+# Endpoint to upload to ibm speech-to-text service the audio
+@app.route('/speech/transcribe', methods=['POST'])
+def transcribe_audio():
+    if 'audio' not in request.files:
+        return jsonify({"error": "No audio file provided"}), 400
+
+    audio_file = request.files['audio']
+    
+    # Save the uploaded audio file to a temporary location
+    with tempfile.NamedTemporaryFile(delete=False) as temp_audio:
+        audio_file.save(temp_audio.name)
+    
+    try:
+        # Convert the audio to WAV format compatible with IBM
+        converted_audio = convert_audio_to_wav(temp_audio.name)
+        
+        with open(converted_audio, 'rb') as wav_file:
+            # Send the converted audio file to IBM Speech to Text
+            response = speech_to_text.recognize(
+                audio=wav_file,
+                content_type='audio/wav'  # This should now be correct
+            ).get_result()
+
+            # Check if transcription results are available
+            if response.get('results') and len(response['results']) > 0:
+                # Extract transcription if available
+                transcription = response['results'][0]['alternatives'][0].get('transcript', "")
+                return jsonify({"transcription": transcription}), 200
+            else:
+                # If no results are available, return an appropriate message
+                return jsonify({"error": "No transcription available"}), 204
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        # Cleanup temporary and converted files
+        os.remove(temp_audio.name)
+        os.remove(converted_audio)
+
+
+
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    pass
